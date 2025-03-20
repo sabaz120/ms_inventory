@@ -1,66 +1,161 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# API de Inventario del Restaurante
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Este microservicio proporciona una API RESTful para gestionar el inventario de ingredientes del restaurante y el historial de compras.
 
-## About Laravel
+## Endpoints
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+La API expone los siguientes endpoints:
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+* **`GET /api/v1/inventory`**:
+    * Devuelve un listado de todos los ingredientes disponibles y sus cantidades actuales.
+    * Ejemplo de respuesta:
+        ```json
+        [
+            {
+                "ingredient": "tomato",
+                "quantity": 5,
+                "created_at": "...",
+                "updated_at": "..."
+            },
+            {
+                "ingredient": "lemon",
+                "quantity": 5,
+                "created_at": "...",
+                "updated_at": "..."
+            },
+            // ... otros ingredientes
+        ]
+        ```
+* **`GET /api/v1/inventory/{ingredient}`**:
+    * Devuelve la información detallada de un ingrediente específico.
+    * Ejemplo de respuesta:
+        ```json
+        {
+            "ingredient": "tomato",
+            "quantity": 5,
+            "created_at": "...",
+            "updated_at": "..."
+        }
+        ```
+* **`POST /api/v1/inventory/request`**:
+    * Recibe una solicitud de ingredientes de la cocina.
+    * Verifica la disponibilidad de los ingredientes y descuenta las cantidades si están disponibles.
+    * Si algún ingrediente no tiene suficiente cantidad, se crea un trabajo en segundo plano para comprarlo en la plaza de mercado (API de farmers-market de alegra.com).
+    * Ejemplo de solicitud:
+        ```json
+        {
+            "ingredients": [
+                {
+                    "name": "tomato",
+                    "quantity": 1
+                },
+                {
+                    "name": "lemon",
+                    "quantity": 1
+                }
+            ]
+        }
+        ```
+    * Ejemplo de respuesta (éxito):
+        ```json
+        {
+            "data": {
+                "message": "Ingredientes solicitados procesados"
+            },
+            "message": "Peticion exitosa, todo salio bien!",
+            "success": true
+        }
+        ```
+* **`GET /api/v1/purchases`**:
+    * Devuelve un listado de todas las compras realizadas en la plaza de mercado.
+    * Ejemplo de respuesta:
+        ```json
+        [
+            {
+                "id": 1,
+                "ingredient": "tomato",
+                "quantity": 10,
+                "created_at": "...",
+                "updated_at": "..."
+            },
+            // ... otras compras
+        ]
+        ```
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Manejo de Solicitudes de Ingredientes
 
-## Learning Laravel
+El endpoint `/api/v1/inventory/request` maneja las solicitudes de ingredientes de la siguiente manera:
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+1.  Recibe un arreglo de ingredientes y cantidades solicitadas.
+2.  Valida que los ingredientes existan en el inventario y que las cantidades solicitadas estén disponibles.
+3.  Si todos los ingredientes están disponibles, descuenta las cantidades del inventario y devuelve una respuesta de éxito.
+4.  Si algún ingrediente no está disponible en la cantidad solicitada:
+    * Rechaza la petición.
+    * Crea un trabajo en segundo plano (`BuyIngredientJob`) para comprar el ingrediente faltante en la plaza de mercado utilizando la API de farmers-market de alegra.com (`https://recruitment.alegra.com/api/farmers-market/buy`).
+    * El trabajo en segundo plano actualiza el inventario una vez que la compra se realiza con éxito.
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+## Integración con la API de la Plaza de Mercado
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+El microservicio se integra con la API de la plaza de mercado para comprar ingredientes faltantes.
 
-## Laravel Sponsors
+* La API de la plaza de mercado se encuentra en `https://recruitment.alegra.com/api/farmers-market/buy`.
+* Recibe el nombre del ingrediente como parámetro (`ingredient`).
+* Devuelve la cantidad comprada (`quantitySold`) en formato JSON.
+* Si el ingrediente no está disponible, `quantitySold` será 0.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Configuración y Ejecución con Docker
 
-### Premium Partners
+Para ejecutar este microservicio utilizando Docker, sigue estos pasos:
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+1.  **Copia el archivo `.env.example` a `.env`:**
+    * `cp .env.example .env`
+    * Asegúrate de configurar las variables de entorno en el archivo `.env` (especialmente las de la base de datos).
 
-## Contributing
+2.  **Levanta los contenedores con Docker Compose:**
+    * `docker-compose up --build -d`
+    * Este comando construirá las imágenes de Docker y levantará los contenedores en modo "detached" (en segundo plano).
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+3.  **Ejecuta las migraciones y semillas en el contenedor `api`:**
+    * `docker-compose exec api php artisan migrate --seed`
+    * Este comando ejecutará las migraciones de la base de datos y los seeders para poblar la base de datos con datos iniciales.
 
-## Code of Conduct
+4.  **Genera la clave de la aplicación Laravel:**
+    * `docker-compose exec api php artisan key:generate`
+    * Este comando generará una clave de aplicación única para tu instalación de Laravel.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+5.  **Accede a la API:**
+    * La API estará disponible en `http://localhost:8003/api/v1/`.
 
-## Security Vulnerabilities
+## Tecnologías Utilizadas
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+* PHP 8.1+
+* Laravel 10
+* MySQL
 
-## License
+## Docker Compose
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+El archivo `docker-compose.yml` define los siguientes servicios:
+
+* **`api`**: El contenedor de la aplicación PHP (Laravel).
+* **`webserver`**: El contenedor del servidor web Nginx.
+* **`database`**: El contenedor del servidor de base de datos MySQL.
+
+## Tests
+
+Este microservicio incluye tests unitarios para verificar el correcto funcionamiento de los endpoints. Los tests cubren los siguientes escenarios:
+
+* **`test_index_success_with_default_parameters`**: Verifica que el endpoint `/api/v1/inventory` devuelve una lista de ingredientes con la estructura correcta y un código de estado 200.
+* **`test_index_success_with_custom_parameters`**: Verifica que el endpoint `/api/v1/inventory` acepta parámetros personalizados (como `take`) y devuelve la cantidad correcta de ingredientes.
+* **`test_show_success`**: Verifica que el endpoint `/api/v1/inventory/{ingredient}` devuelve la información correcta del ingrediente con la estructura correcta y un código de estado 200.
+* **`test_show_inventory_not_found`**: Verifica que el endpoint `/api/v1/inventory/{ingredient}` devuelve un código de estado 404 cuando se solicita un ingrediente que no existe.
+* **`test_request_success`**: Verifica que el endpoint `/api/v1/inventory/request` procesa correctamente una solicitud de ingredientes cuando hay suficiente cantidad disponible.
+* **`test_request_insufficient_quantity`**: Verifica que el endpoint `/api/v1/inventory/request` crea un trabajo en segundo plano para comprar ingredientes cuando no hay suficiente cantidad disponible.
+* **`test_request_ingredient_not_found`**: Verifica que el endpoint `/api/v1/inventory/request` devuelve un error cuando se solicita un ingrediente que no existe.
+* **`test_request_validation_errors`**: Verifica que el endpoint `/api/v1/inventory/request` devuelve errores de validación cuando los datos de la solicitud son inválidos.
+* **`test_index_success_with_default_parameters` (Purchases)**: Verifica que el endpoint `/api/v1/purchases` devuelve una lista de compras con la estructura correcta y un código de estado 200.
+* **`test_index_success_with_custom_parameters` (Purchases)**: Verifica que el endpoint `/api/v1/purchases` acepta parámetros personalizados (como `take`) y devuelve la cantidad correcta de compras.
+
+Para ejecutar los tests, puedes utilizar el siguiente comando dentro del contenedor `api`:
+
+```bash
+docker-compose exec api php artisan test
